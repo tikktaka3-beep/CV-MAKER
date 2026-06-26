@@ -1,7 +1,6 @@
 """
 main.py
-SLIDE BOT - matn asosida taqdimot (.pptx) yaratuvchi Telegram bot.
-Yangi ko'p theme (dizayn) qo'llab-quvvatlanadi.
+SLIDE BOT - Yangi admin va limit boshqaruvi
 """
 
 import os
@@ -29,7 +28,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+ADMIN_ID = int(os.getenv("ADMIN_ID", "1691140865"))  # Sizning ID'ingiz
 ADMIN_CONTACT = os.getenv("ADMIN_CONTACT", "@tikitaka1103")
 
 bot = Bot(token=BOT_TOKEN)
@@ -45,7 +44,7 @@ class Flow(StatesGroup):
     waiting_notes = State()
 
 
-# ---------- Inline klaviaturalar ----------
+# ---------- Klaviaturalar ----------
 def kb_language() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🇺🇿 O'zbek", callback_data="lang_uz")],
@@ -53,11 +52,9 @@ def kb_language() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🇬🇧 Ingliz", callback_data="lang_en")],
     ])
 
-
 def kb_slide_count() -> InlineKeyboardMarkup:
     row = [InlineKeyboardButton(text=str(n), callback_data=f"count_{n}") for n in range(5, 9)]
     return InlineKeyboardMarkup(inline_keyboard=[row])
-
 
 def kb_style() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -75,23 +72,21 @@ def kb_style() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🏆 Sport", callback_data="style_sport")],
     ])
 
-
 def kb_notes() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➡️ Yo'q, davom et", callback_data="notes_skip")],
     ])
 
 
-# ---------- /start ----------
+# ---------- Buyruqlar ----------
 @dp.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     db.ensure_user(message.from_user.id, message.from_user.username)
     await message.answer(
-        "👋 Salom! Men taqdimot (slayd) tayyorlovchi botman.\n\n"
-        "Menga mavzu yoki matn yuboring — men chiroyli "
-        "PowerPoint taqdimotini tayyorlab beraman.\n\n"
-        "✍️ Mavzuni yoki matnni yuboring:"
+        "👋 Salom! Men taqdimot tayyorlovchi botman.\n\n"
+        "Mavzu yuboring — men chiroyli PPTX tayyorlayman.\n\n"
+        "✍️ Mavzuni yozing:"
     )
     await state.set_state(Flow.waiting_text)
 
@@ -99,16 +94,14 @@ async def cmd_start(message: Message, state: FSMContext):
 @dp.message(Command("help"))
 async def cmd_help(message: Message):
     await message.answer(
-        "📌 Qanday ishlaydi:\n"
-        "1. Mavzu yoki matn yuboring\n"
-        "2. Tilni tanlang (uz/ru/en)\n"
-        "3. Slayd sonini tanlang (5-8)\n"
-        "4. Dizayn uslubini tanlang\n"
-        "5. Qo'shimcha izoh (ixtiyoriy)\n\n"
-        f"⚠️ Kuniga bepul {db.DEFAULT_DAILY_LIMIT} ta taqdimot yaratish mumkin.\n"
-        f"Limitni oshirish uchun: {ADMIN_CONTACT}\n\n"
-        "/start - yangi taqdimot boshlash\n"
-        "/mylimit - bugungi limitingizni ko'rish"
+        "📌 Bot qanday ishlaydi:\n"
+        "1. Mavzu yuborish\n"
+        "2. Til tanlash\n"
+        "3. Slayd soni\n"
+        "4. Dizayn uslubi\n"
+        "5. Qo'shimcha izoh\n\n"
+        f"⚠️ Kuniga {db.DEFAULT_DAILY_LIMIT} ta bepul.\n"
+        f"Admin: {ADMIN_CONTACT}"
     )
 
 
@@ -118,16 +111,16 @@ async def cmd_mylimit(message: Message):
     remaining = db.remaining_today(message.from_user.id)
     limit = db.get_limit(message.from_user.id)
     await message.answer(
-        f"📊 Kunlik limitingiz: {limit} ta\n"
-        f"Bugun qolgan: {remaining} ta\n\n"
-        f"Limitni oshirish uchun: {ADMIN_CONTACT}"
+        f"📊 Sizning limitingiz: {limit} ta\n"
+        f"Bugun qolgan: {remaining} ta"
     )
 
 
-# ---------- Admin: limitni o'zgartirish ----------
+# ---------- FAQAT ADMIN UCHUN ----------
 @dp.message(Command("setlimit"))
 async def cmd_setlimit(message: Message, command: CommandObject):
     if message.from_user.id != ADMIN_ID:
+        await message.answer("❌ Bu buyruq faqat admin uchun!")
         return
     if not command.args:
         await message.answer("Foydalanish: /setlimit <user_id> <limit>")
@@ -136,30 +129,33 @@ async def cmd_setlimit(message: Message, command: CommandObject):
         parts = command.args.split()
         target_id = int(parts[0])
         new_limit = int(parts[1])
-    except (ValueError, IndexError):
-        await message.answer("Foydalanish: /setlimit <user_id> <limit>")
-        return
-
-    db.set_limit(target_id, new_limit)
-    await message.answer(f"✅ Foydalanuvchi {target_id} uchun kunlik limit {new_limit} ga o'zgartirildi.")
-    try:
-        await bot.send_message(target_id, f"🎉 Sizning kunlik limitingiz {new_limit} taga oshirildi!")
-    except Exception:
-        pass
+        db.set_limit(target_id, new_limit)
+        await message.answer(f"✅ Foydalanuvchi {target_id} uchun limit {new_limit} ga o‘zgartirildi.")
+        try:
+            await bot.send_message(target_id, f"🎉 Admin sizga kunlik limitni {new_limit} taga oshirdi!")
+        except:
+            pass
+    except:
+        await message.answer("❌ Noto‘g‘ri format. Misol: /setlimit 123456789 10")
 
 
-# ---------- 1. Matn qabul qilish ----------
+# ---------- Oddiy foydalanuvchilar uchun limit so'rash (ixtiyoriy) ----------
+@dp.message(Command("requestlimit"))
+async def request_limit(message: Message):
+    await message.answer(
+        f"Admin ({ADMIN_CONTACT}) ga yozing va limit so'rang.\n"
+        f"Misol: 'Limit bersangiz, user_id: {message.from_user.id}'"
+    )
+
+
+# Qolgan kodlar (oldingi versiyadan)
 @dp.message(Flow.waiting_text, F.text)
 async def receive_text(message: Message, state: FSMContext):
     await state.update_data(source_text=message.text)
-    await message.answer(
-        "🌐 Taqdimot qaysi tilda bo'lsin?",
-        reply_markup=kb_language(),
-    )
+    await message.answer("🌐 Tilni tanlang:", reply_markup=kb_language())
     await state.set_state(Flow.waiting_language)
 
 
-# ---------- 2. Til tanlash ----------
 @dp.callback_query(Flow.waiting_language, F.data.startswith("lang_"))
 async def choose_language(callback: CallbackQuery, state: FSMContext):
     lang = callback.data.split("_")[1]
@@ -170,33 +166,29 @@ async def choose_language(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ---------- 3. Slayd soni ----------
 @dp.callback_query(Flow.waiting_slide_count, F.data.startswith("count_"))
 async def choose_count(callback: CallbackQuery, state: FSMContext):
     count = int(callback.data.split("_")[1])
     await state.update_data(slide_count=count)
     await callback.message.edit_text(f"✅ Slayd soni: {count}")
-    await callback.message.answer("🎨 Taqdimot dizayn uslubini tanlang:", reply_markup=kb_style())
+    await callback.message.answer("🎨 Dizayn uslubini tanlang:", reply_markup=kb_style())
     await state.set_state(Flow.waiting_style)
     await callback.answer()
 
 
-# ---------- 4. Uslub / Theme ----------
 @dp.callback_query(Flow.waiting_style, F.data.startswith("style_"))
 async def choose_style(callback: CallbackQuery, state: FSMContext):
     style = callback.data.split("_")[1]
     await state.update_data(style=style)
-    await callback.message.edit_text("📝 Qo'shimcha izoh yoki talab bormi?")
+    await callback.message.edit_text("📝 Qo'shimcha izoh bormi?")
     await callback.message.answer(
-        "Agar bo'lsa yozing (masalan: 'statistik raqamlar qo'shilsin', 'rasmlar bo'lsin'), "
-        "yo'q bo'lsa pastdagi tugmani bosing:",
+        "Izoh yozing yoki pastdagi tugmani bosing:",
         reply_markup=kb_notes(),
     )
     await state.set_state(Flow.waiting_notes)
     await callback.answer()
 
 
-# ---------- 5a. Izohni o'tkazib yuborish ----------
 @dp.callback_query(Flow.waiting_notes, F.data == "notes_skip")
 async def skip_notes(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
@@ -205,23 +197,17 @@ async def skip_notes(callback: CallbackQuery, state: FSMContext):
     await generate_and_send(callback.from_user.id, callback.message, state)
 
 
-# ---------- 5b. Izohni matn sifatida qabul qilish ----------
 @dp.message(Flow.waiting_notes, F.text)
 async def receive_notes(message: Message, state: FSMContext):
     await state.update_data(extra_notes=message.text)
-    status = await message.answer("⏳ Tayyorlanmoqda, biroz kuting...")
+    status = await message.answer("⏳ Tayyorlanmoqda...")
     await generate_and_send(message.from_user.id, status, state)
 
 
-# ---------- Generatsiya va yuborish ----------
 async def generate_and_send(user_id: int, status_message: Message, state: FSMContext):
     db.ensure_user(user_id)
-
     if not db.can_generate(user_id):
-        await status_message.answer(
-            "🚫 Bugungi bepul limitingiz tugadi.\n"
-            f"Limitni oshirish uchun admin bilan bog'laning: {ADMIN_CONTACT}"
-        )
+        await status_message.answer(f"🚫 Limitingiz tugadi.\nAdmin: {ADMIN_CONTACT}")
         await state.clear()
         return
 
@@ -238,46 +224,28 @@ async def generate_and_send(user_id: int, status_message: Message, state: FSMCon
         content = await asyncio.to_thread(
             generate_slides_content, source_text, language, slide_count, style, extra_notes
         )
-        
-        # Yangi theme bilan yaratish
-        await asyncio.to_thread(
-            create_presentation, content["slides"], output_path, style
-        )
+        await asyncio.to_thread(create_presentation, content["slides"], output_path, style)
 
         await bot.send_document(
             chat_id=user_id,
             document=FSInputFile(output_path, filename="taqdimot.pptx"),
-            caption="✅ Taqdimotingiz tayyor!\n"
-                    f"Dizayn: {style.capitalize()}",
+            caption=f"✅ Tayyor!\nDizayn: {style.capitalize()}",
         )
         db.increment_usage(user_id)
-
-        remaining = db.remaining_today(user_id)
-        if remaining <= 0:
-            await bot.send_message(
-                user_id,
-                f"ℹ️ Bugungi limitingiz tugadi. Yana yaratish uchun: {ADMIN_CONTACT}",
-            )
-
     except Exception as e:
-        logger.exception("Taqdimot yaratishda xatolik")
-        await bot.send_message(
-            user_id,
-            "❌ Taqdimot yaratishda xatolik yuz berdi. Birozdan keyin qaytadan urinib ko'ring.",
-        )
+        logger.exception("Xatolik")
+        await bot.send_message(user_id, "❌ Xatolik yuz berdi. Qayta urinib ko‘ring.")
     finally:
         if os.path.exists(output_path):
             os.remove(output_path)
         await state.clear()
 
 
-# ---------- Holatdan tashqari matn ----------
 @dp.message(F.text)
 async def fallback(message: Message, state: FSMContext):
-    current = await state.get_state()
-    if current is None:
+    if await state.get_state() is None:
         await state.update_data(source_text=message.text)
-        await message.answer("🌐 Taqdimot qaysi tilda bo'lsin?", reply_markup=kb_language())
+        await message.answer("🌐 Tilni tanlang:", reply_markup=kb_language())
         await state.set_state(Flow.waiting_language)
 
 
@@ -288,6 +256,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
     
     
