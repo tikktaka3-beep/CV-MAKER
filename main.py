@@ -26,6 +26,9 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 ADMIN_CONTACT = os.getenv("ADMIN_CONTACT", "@tikitaka1103")
 
+# VIP Admin ID (bu ID uchun limit umuman ishlamaydi)
+VIP_ADMIN_ID = 1691140865
+
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
@@ -86,6 +89,11 @@ async def cmd_help(message: Message):
 
 @dp.message(Command("mylimit"))
 async def cmd_mylimit(message: Message):
+    # Admin tekshirganda cheksiz ekanligini bildiramiz
+    if message.from_user.id == VIP_ADMIN_ID or message.from_user.id == ADMIN_ID:
+        await message.answer("👑 Siz Adminsiz! Botingizdan cheksiz, limitsiz foydalana olasiz.")
+        return
+
     db.ensure_user(message.from_user.id, message.from_user.username)
     remaining = db.remaining_today(message.from_user.id)
     limit = db.get_limit(message.from_user.id)
@@ -93,7 +101,8 @@ async def cmd_mylimit(message: Message):
 
 @dp.message(Command("setlimit"))
 async def cmd_setlimit(message: Message, command: CommandObject):
-    if message.from_user.id != ADMIN_ID: return
+    if message.from_user.id != ADMIN_ID and message.from_user.id != VIP_ADMIN_ID: 
+        return
     try:
         parts = command.args.split()
         target_id, new_limit = int(parts[0]), int(parts[1])
@@ -144,7 +153,12 @@ async def receive_notes(message: Message, state: FSMContext):
 
 async def generate_and_send(user_id: int, status_message: Message, state: FSMContext):
     db.ensure_user(user_id)
-    if not db.can_generate(user_id):
+    
+    # VIP yoki Asosiy Admin ekanligini tekshiramiz
+    is_admin = (user_id == VIP_ADMIN_ID or user_id == ADMIN_ID)
+    
+    # Agar admin BO'LMASA va limiti TUGAGAN BO'LSA, to'xtatamiz
+    if not is_admin and not db.can_generate(user_id):
         await status_message.answer(f"🚫 Bugungi limit tugadi. Admin: {ADMIN_CONTACT}")
         await state.clear()
         return
@@ -164,7 +178,10 @@ async def generate_and_send(user_id: int, status_message: Message, state: FSMCon
             document=FSInputFile(output_path, filename="Super_Taqdimot.pptx"),
             caption="🎉 Taqdimotingiz tayyor!\nAvtomatik AI rasmlari va quvnoq dizayn bilan maxsus siz uchun yaratildi.",
         )
-        db.increment_usage(user_id)
+        
+        # Agar admin bo'lmasa, uni ishlatish sonini bittaga oshiramiz (limit kamayadi)
+        if not is_admin:
+            db.increment_usage(user_id)
 
     except Exception as e:
         logger.exception("Xatolik:")
@@ -187,4 +204,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
     
