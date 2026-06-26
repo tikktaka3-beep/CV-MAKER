@@ -1,6 +1,0 @@
-aiogram==3.4.1
-SQLAlchemy==2.0.29
-asyncpg==0.29.0
-python-dotenv==1.0.1
-reportlab==4.1.0
-Pillow==10.3.0
