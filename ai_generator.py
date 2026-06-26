@@ -1,18 +1,21 @@
 """
-ai_generator.py — Mukammal AI prompt bilan
+ai_generator.py — Groq (tez va kuchli)
 """
 
 import os
 import json
-from google import genai
-from google.genai import types
+from groq import Groq
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=GEMINI_API_KEY)
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+client = Groq(api_key=GROQ_API_KEY)
 
-MODEL = "gemini-2.5-flash"
+MODEL = "llama-3.3-70b-versatile"   # yoki "mixtral-8x7b-32768", "gemma2-9b-it"
 
-LANGUAGE_NAMES = {"uz": "o'zbek", "ru": "rus", "en": "ingliz"}
+LANGUAGE_NAMES = {
+    "uz": "o'zbek",
+    "ru": "rus",
+    "en": "ingliz",
+}
 
 STYLE_DESCRIPTIONS = {
     "rasmiy": "rasmiy va professional uslubda",
@@ -21,18 +24,12 @@ STYLE_DESCRIPTIONS = {
 }
 
 THEME_DESCRIPTIONS = {
-    "rasmiy": "rasmiy va professional",
-    "zamonaviy": "zamonaviy, minimalistik va texnologik",
-    "rangbarang": "rang-barang, quvnoq va yorqin",
-    "och": "engil, ochiq va havo ranglarda",
-    "toq": "chuqur, kuchli va to'q ranglarda",
-    "qadimiy": "qadimiy, klassik va tarixiy ruhda",
-    "adabiy": "adabiy, she'riy va ilhomlantiruvchi",
-    "matematik": "ilmiy, aniq va formula/usulga asoslangan",
-    "kimyoviy": "kimyoviy elementlar va reaktsiyalar uslubida",
-    "fizik": "fizika tajribalari va energiya ruhida",
-    "astronomik": "kosmos, yulduzlar va galaktika mavzusida",
-    "sport": "dinamik, harakatli va motivatsion"
+    "rasmiy": "rasmiy va professional", "zamonaviy": "zamonaviy va minimalistik",
+    "rangbarang": "rang-barang va quvnoq", "och": "engil va ochiq ranglarda",
+    "toq": "chuqur va to'q ranglarda", "qadimiy": "qadimiy va klassik",
+    "adabiy": "adabiy va ilhomlantiruvchi", "matematik": "ilmiy va aniq",
+    "kimyoviy": "kimyoviy uslubda", "fizik": "fizika ruhida",
+    "astronomik": "kosmos va yulduzlar mavzusida", "sport": "dinamik va motivatsion"
 }
 
 
@@ -41,42 +38,34 @@ def generate_slides_content(text: str, language: str, slide_count: int, style: s
     style_desc = STYLE_DESCRIPTIONS.get(style, STYLE_DESCRIPTIONS["rasmiy"])
     theme_desc = THEME_DESCRIPTIONS.get(style, THEME_DESCRIPTIONS["rasmiy"])
 
-    system_prompt = f"""Sen yuqori darajadagi professional prezentatsiya dizayneri va kontent muallifisan.
-
+    system_prompt = f"""Sen professional prezentatsiya yaratuvchisan.
 Foydalanuvchi matni asosida aniq {slide_count} ta slayddan iborat mukammal taqdimot yarating.
 
-QAT'IY QOIDALAR:
-- Til: {lang_name} tili. Barcha matnlar toza {lang_name} tilida bo'lsin.
-- Matn uslubi: {style_desc}.
-- Visual Theme: {theme_desc}. Kontentni shu mavzuga to'liq moslashtiring (masalan: matematikada formulalar, astronomiyada kosmos tasvirlari, sportda dinamika va g'alaba ruhini qo'shing).
-- Birinchi slayd: Kuchli muqova (title + subtitle).
-- Oxirgi slayd: Yopilish / Rahmat / Savollar slaydi.
-- O'rtadagi slaydlar: Har birida 3-5 ta qisqa, ta'sirli bullet (har biri 10-15 so'zdan oshmasin).
-- Har bir slayd alohida, mantiqiy ketma-ketlikda bo'lsin.
-- Takrorlanish bo'lmasin.
+Qoidalar:
+- Til: {lang_name}
+- Uslub: {style_desc}
+- Theme: {theme_desc} — kontentni shunga moslashtir
+- 1-slayd: Muqova
+- Oxirgi slayd: Xulosa / Rahmat
+- O'rtadagilar: 3-5 ta qisqa bullet
+- Javob faqat JSON bo'lsin."""
 
-Javobni faqat quyidagi JSON formatida qaytar:
-{{"slides": [{{"title": "...", "subtitle": "...", "bullets": ["...", "..."]}}, ...]}}
-"""
+    user_prompt = f"Mavzu: {text}\nQo'shimcha: {extra_notes}" if extra_notes else f"Mavzu: {text}"
 
-    user_content = f"Mavzu:\n{text}"
-    if extra_notes:
-        user_content += f"\n\nQo'shimcha talablar:\n{extra_notes}"
-
-    response = client.models.generate_content(
+    response = client.chat.completions.create(
         model=MODEL,
-        contents=user_content,
-        config=types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            response_mime_type="application/json",
-            temperature=0.75,
-            top_p=0.85,
-        ),
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=0.7,
+        max_tokens=4000,
+        response_format={"type": "json_object"}
     )
 
-    data = json.loads(response.text)
+    data = json.loads(response.choices[0].message.content)
 
-    if "slides" not in data or len(data["slides"]) < 2:
+    if "slides" not in data:
         raise ValueError("AI javobi noto'g'ri")
 
     # Slayd sonini to'g'rilash
