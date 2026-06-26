@@ -1,47 +1,59 @@
-"""
-slide_generator.py
-Berilgan slayd ma'lumotlari (JSON/dict) asosida chiroyli, rangli .pptx fayl yaratadi.
-Faqat 1 ta belgilangan dizayn shabloni ishlatiladi (foydalanuvchi tomonidan tanlanmaydi).
-"""
-
+import requests
+import urllib.parse
+from io import BytesIO
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 
-# ---------- Rang palitrasi ----------
-NAVY = RGBColor(0x1E, 0x27, 0x61)      # asosiy qorongi rang (muqova/yopilish slaydlari)
-ICE = RGBColor(0xCA, 0xDC, 0xFC)       # yengil ko'k - subtitle/matn
-GOLD = RGBColor(0xF2, 0xA9, 0x3B)      # urg'u rangi (doiralar, raqamlar)
-WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-DARK_TEXT = RGBColor(0x2B, 0x2B, 0x2B)
-MUTED = RGBColor(0x9A, 0x9A, 0x9A)
+# --- QUVNOQ VA OCHIQ RANGLAR PALITRASI (Har slayd uchun turlicha) ---
+PASTEL_THEMES = [
+    RGBColor(255, 235, 238), # Och pushti
+    RGBColor(227, 242, 253), # Och havorang
+    RGBColor(232, 245, 233), # Och yashil
+    RGBColor(255, 243, 224), # Och shaftoli (peach)
+    RGBColor(243, 229, 245), # Och binafsha (lavender)
+    RGBColor(255, 248, 225), # Och sariq
+    RGBColor(224, 242, 241), # Och yalpiz (mint)
+]
 
-FONT = "Calibri"
+DARK_TEXT = RGBColor(43, 43, 43)
+ACCENT_COLOR = RGBColor(255, 107, 107) # Bullets va urg'ular uchun qizil-pushti
+
+FONT_TITLE = "Trebuchet MS"
+FONT_BODY = "Calibri"
 
 SLIDE_W = Inches(13.333)
 SLIDE_H = Inches(7.5)
+MAX_BULLETS = 5
 
-MAX_BULLETS_PER_SLIDE = 5
-
+def fetch_image(prompt: str) -> BytesIO:
+    """Sun'iy intellekt orqali bepul va quvnoq vektor rasm yuklab olish"""
+    if not prompt:
+        return None
+    full_prompt = f"{prompt}, cute colorful flat vector art illustration, bright, minimal background"
+    safe_prompt = urllib.parse.quote(full_prompt)
+    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=800&height=800&nologo=true"
+    try:
+        r = requests.get(url, timeout=12)
+        if r.status_code == 200:
+            return BytesIO(r.content)
+    except Exception as e:
+        print(f"Rasm yuklashda xatolik ({prompt}): {e}")
+    return None
 
 def _set_background(slide, color: RGBColor):
     fill = slide.background.fill
     fill.solid()
     fill.fore_color.rgb = color
 
-
 def _add_text(slide, left, top, width, height, text, size, color,
                bold=False, italic=False, align=PP_ALIGN.LEFT, anchor=None,
-               font=FONT, line_spacing=1.08):
+               font=FONT_BODY, line_spacing=1.1):
     box = slide.shapes.add_textbox(left, top, width, height)
     tf = box.text_frame
     tf.word_wrap = True
-    tf.margin_left = 0
-    tf.margin_right = 0
-    tf.margin_top = 0
-    tf.margin_bottom = 0
     if anchor is not None:
         tf.vertical_anchor = anchor
     p = tf.paragraphs[0]
@@ -56,97 +68,83 @@ def _add_text(slide, left, top, width, height, text, size, color,
     run.font.name = font
     return box
 
-
-def _add_circle(slide, left, top, diameter, color, line=False):
+def _add_circle(slide, left, top, diameter, color):
     shape = slide.shapes.add_shape(MSO_SHAPE.OVAL, left, top, diameter, diameter)
     shape.fill.solid()
     shape.fill.fore_color.rgb = color
-    if not line:
-        shape.line.fill.background()
+    shape.line.fill.background()
     shape.shadow.inherit = False
     return shape
 
-
-def _decorate_dark_slide(slide):
-    """Qorongi fon slaydlari uchun burchaklardagi bezak doiralar (vizual motiv)."""
-    _add_circle(slide, SLIDE_W - Inches(2.4), Inches(-1.0), Inches(3.2), GOLD)
-    _add_circle(slide, Inches(-1.4), SLIDE_H - Inches(1.6), Inches(2.8), ICE)
-    # fon ustidagi doiralarni biroz xira ko'rsatish imkoni yo'q (pptx cheklovi),
-    # shu sababli ular kichik va burchaklarda joylashtirildi - matnga xalaqit bermaydi.
-
-
-def add_cover_slide(prs: Presentation, title: str, subtitle: str = ""):
+def add_cover_slide(prs, title, subtitle, image_prompt, theme_color):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
-    _set_background(slide, NAVY)
-    _decorate_dark_slide(slide)
-    _add_text(
-        slide, Inches(1.2), Inches(2.9), SLIDE_W - Inches(2.4), Inches(1.6),
-        title, 40, WHITE, bold=True, align=PP_ALIGN.CENTER,
-        anchor=MSO_ANCHOR.MIDDLE,
-    )
+    _set_background(slide, theme_color)
+    
+    # Katta dekorativ doira fon uchun
+    _add_circle(slide, SLIDE_W - Inches(5), Inches(-2), Inches(8), RGBColor(255, 255, 255))
+    
+    # Chap tomonda matn
+    _add_text(slide, Inches(1.0), Inches(2.5), Inches(6.5), Inches(2.0),
+              title, 48, DARK_TEXT, bold=True, align=PP_ALIGN.LEFT, font=FONT_TITLE)
     if subtitle:
-        _add_text(
-            slide, Inches(1.8), Inches(4.6), SLIDE_W - Inches(3.6), Inches(0.8),
-            subtitle, 18, GOLD, italic=True, align=PP_ALIGN.CENTER,
-        )
-    return slide
+        _add_text(slide, Inches(1.0), Inches(4.5), Inches(6.0), Inches(1.0),
+                  subtitle, 22, ACCENT_COLOR, bold=True, italic=True, align=PP_ALIGN.LEFT)
+                  
+    # O'ng tomonda AI rasm
+    img_stream = fetch_image(image_prompt) if image_prompt else None
+    if img_stream:
+        try:
+            slide.shapes.add_picture(img_stream, Inches(7.5), Inches(1.5), height=Inches(4.5))
+        except:
+            pass
 
-
-def add_content_slide(prs: Presentation, title: str, bullets, slide_no: int, total: int):
+def add_content_slide(prs, title, bullets, image_prompt, slide_no, total, theme_color):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
-    _set_background(slide, WHITE)
+    _set_background(slide, theme_color)
+    
+    # Har safar rasm va matn joylashuvini o'zgartirish (dinamik dizayn)
+    image_on_left = (slide_no % 2 == 0)
+    
+    # Sarlavha (Tepada o'rtada)
+    _add_text(slide, Inches(0.5), Inches(0.4), SLIDE_W - Inches(1.0), Inches(1.0),
+              title, 36, DARK_TEXT, bold=True, align=PP_ALIGN.CENTER, font=FONT_TITLE)
 
-    _add_text(
-        slide, Inches(0.8), Inches(0.55), SLIDE_W - Inches(1.6), Inches(0.9),
-        title, 30, NAVY, bold=True, align=PP_ALIGN.LEFT,
-    )
-
-    bullets = [b for b in (bullets or []) if b][:MAX_BULLETS_PER_SLIDE]
+    # Joylashuv o'lchamlari
+    text_left = Inches(5.5) if image_on_left else Inches(0.8)
+    img_left = Inches(0.5) if image_on_left else Inches(7.8)
+    
+    # Rasm yuklash va qo'yish
+    img_stream = fetch_image(image_prompt) if image_prompt else None
+    if img_stream:
+        try:
+            slide.shapes.add_picture(img_stream, img_left, Inches(2.0), width=Inches(5.0), height=Inches(5.0))
+        except:
+            pass
+            
+    # Oq fonga ega quti matnlar uchun
+    shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, text_left, Inches(1.8), Inches(7.0), Inches(5.0))
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = RGBColor(255, 255, 255)
+    shape.line.fill.background()
+    
+    bullets = [b for b in (bullets or []) if b][:MAX_BULLETS]
     n = max(len(bullets), 1)
-    top_start = Inches(1.95)
-    bottom_limit = SLIDE_H - Inches(0.9)
-    available = bottom_limit - top_start
-    row_h = min(Inches(1.05), available / n)
-    block_h = row_h * n
-    top = top_start + max(available - block_h, 0) / 2
+    row_h = min(Inches(1.0), Inches(4.6) / n)
+    top = Inches(2.0)
+    
     for bullet in bullets:
-        circle_d = Inches(0.22)
-        circle_top = top + (row_h - circle_d) / 2 - Inches(0.18)
-        _add_circle(slide, Inches(0.85), circle_top, circle_d, GOLD)
-        _add_text(
-            slide, Inches(1.35), top, SLIDE_W - Inches(2.2), row_h,
-            bullet, 16, DARK_TEXT, align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP,
-        )
+        circle_d = Inches(0.2)
+        circle_top = top + (row_h - circle_d) / 2 - Inches(0.15)
+        _add_circle(slide, text_left + Inches(0.3), circle_top, circle_d, ACCENT_COLOR)
+        _add_text(slide, text_left + Inches(0.7), top, Inches(6.0), row_h,
+                  bullet, 20, DARK_TEXT, align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP)
         top += row_h
 
-    _add_text(
-        slide, SLIDE_W - Inches(1.4), SLIDE_H - Inches(0.55), Inches(1.0), Inches(0.4),
-        f"{slide_no}/{total}", 10, MUTED, align=PP_ALIGN.RIGHT,
-    )
-    return slide
-
-
-def add_closing_slide(prs: Presentation, title: str, subtitle: str = ""):
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    _set_background(slide, NAVY)
-    _decorate_dark_slide(slide)
-    _add_text(
-        slide, Inches(1.2), Inches(3.0), SLIDE_W - Inches(2.4), Inches(1.3),
-        title, 36, WHITE, bold=True, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE,
-    )
-    if subtitle:
-        _add_text(
-            slide, Inches(1.8), Inches(4.35), SLIDE_W - Inches(3.6), Inches(0.8),
-            subtitle, 16, ICE, italic=True, align=PP_ALIGN.CENTER,
-        )
-    return slide
-
+    # Slayd raqami
+    _add_text(slide, SLIDE_W - Inches(1.5), SLIDE_H - Inches(0.6), Inches(1.0), Inches(0.4),
+              f"{slide_no}/{total}", 14, DARK_TEXT, align=PP_ALIGN.RIGHT, bold=True)
 
 def create_presentation(slides_data: list, output_path: str):
-    """
-    slides_data: [{"title": str, "subtitle": str, "bullets": [str, ...]}, ...]
-    Birinchi element - muqova, oxirgisi (agar bullets bo'sh bo'lsa) - yopilish slaydi.
-    """
     prs = Presentation()
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H
@@ -156,13 +154,18 @@ def create_presentation(slides_data: list, output_path: str):
         title = (item.get("title") or "").strip()
         subtitle = (item.get("subtitle") or "").strip()
         bullets = item.get("bullets") or []
+        image_prompt = item.get("image_prompt") or ""
+        
+        # Har bir slayd uchun turlicha rang tanlash
+        theme_color = PASTEL_THEMES[i % len(PASTEL_THEMES)]
 
         if i == 1:
-            add_cover_slide(prs, title, subtitle)
+            add_cover_slide(prs, title, subtitle, image_prompt, theme_color)
         elif i == total and not bullets:
-            add_closing_slide(prs, title, subtitle)
+            add_cover_slide(prs, title, subtitle, image_prompt, theme_color)
         else:
-            add_content_slide(prs, title, bullets, i, total)
+            add_content_slide(prs, title, bullets, image_prompt, i, total, theme_color)
 
     prs.save(output_path)
     return output_path
+    
