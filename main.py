@@ -1,6 +1,6 @@
 """
 main.py
-SLIDE BOT - Yangi admin va limit boshqaruvi
+SLIDE BOT - Admin ID 1691140865 + Limit tuzatilgan
 """
 
 import os
@@ -28,14 +28,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "1691140865"))  # Sizning ID'ingiz
+ADMIN_ID = 1691140865  # Sizning ID'ingiz
 ADMIN_CONTACT = os.getenv("ADMIN_CONTACT", "@tikitaka1103")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 
-# ---------- FSM holatlari ----------
 class Flow(StatesGroup):
     waiting_text = State()
     waiting_language = State()
@@ -44,7 +43,7 @@ class Flow(StatesGroup):
     waiting_notes = State()
 
 
-# ---------- Klaviaturalar ----------
+# ==================== KLAVIATURALAR ====================
 def kb_language() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🇺🇿 O'zbek", callback_data="lang_uz")],
@@ -78,15 +77,14 @@ def kb_notes() -> InlineKeyboardMarkup:
     ])
 
 
-# ---------- Buyruqlar ----------
+# ==================== BUYRUQLAR ====================
 @dp.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     db.ensure_user(message.from_user.id, message.from_user.username)
     await message.answer(
-        "👋 Salom! Men taqdimot tayyorlovchi botman.\n\n"
-        "Mavzu yuboring — men chiroyli PPTX tayyorlayman.\n\n"
-        "✍️ Mavzuni yozing:"
+        "👋 Salom! Taqdimot tayyorlovchi botga xush kelibsiz.\n\n"
+        "Mavzu yoki matn yuboring — men chiroyli .pptx tayyorlayman."
     )
     await state.set_state(Flow.waiting_text)
 
@@ -94,14 +92,14 @@ async def cmd_start(message: Message, state: FSMContext):
 @dp.message(Command("help"))
 async def cmd_help(message: Message):
     await message.answer(
-        "📌 Bot qanday ishlaydi:\n"
+        "📌 Qanday ishlaydi:\n"
         "1. Mavzu yuborish\n"
         "2. Til tanlash\n"
-        "3. Slayd soni\n"
-        "4. Dizayn uslubi\n"
+        "3. Slayd soni (5-8)\n"
+        "4. Dizayn tanlash\n"
         "5. Qo'shimcha izoh\n\n"
         f"⚠️ Kuniga {db.DEFAULT_DAILY_LIMIT} ta bepul.\n"
-        f"Admin: {ADMIN_CONTACT}"
+        f"Limit oshirish: {ADMIN_CONTACT}"
     )
 
 
@@ -111,44 +109,36 @@ async def cmd_mylimit(message: Message):
     remaining = db.remaining_today(message.from_user.id)
     limit = db.get_limit(message.from_user.id)
     await message.answer(
-        f"📊 Sizning limitingiz: {limit} ta\n"
-        f"Bugun qolgan: {remaining} ta"
+        f"📊 Kunlik limitingiz: **{limit}** ta\n"
+        f"Bugun qolgan: **{remaining}** ta\n\n"
+        f"Ko'proq limit kerak bo'lsa — {ADMIN_CONTACT}"
     )
 
 
-# ---------- FAQAT ADMIN UCHUN ----------
+# ==================== FAQAT ADMIN ====================
 @dp.message(Command("setlimit"))
 async def cmd_setlimit(message: Message, command: CommandObject):
     if message.from_user.id != ADMIN_ID:
         await message.answer("❌ Bu buyruq faqat admin uchun!")
         return
     if not command.args:
-        await message.answer("Foydalanish: /setlimit <user_id> <limit>")
+        await message.answer("Foydalanish: `/setlimit <user_id> <limit>`")
         return
     try:
         parts = command.args.split()
         target_id = int(parts[0])
         new_limit = int(parts[1])
         db.set_limit(target_id, new_limit)
-        await message.answer(f"✅ Foydalanuvchi {target_id} uchun limit {new_limit} ga o‘zgartirildi.")
+        await message.answer(f"✅ Foydalanuvchi `{target_id}` uchun limit {new_limit} ga o‘zgartirildi.")
         try:
-            await bot.send_message(target_id, f"🎉 Admin sizga kunlik limitni {new_limit} taga oshirdi!")
+            await bot.send_message(target_id, f"🎉 Admin sizning kunlik limitingizni {new_limit} taga oshirdi!")
         except:
             pass
     except:
-        await message.answer("❌ Noto‘g‘ri format. Misol: /setlimit 123456789 10")
+        await message.answer("❌ Noto‘g‘ri! Misol: `/setlimit 1691140865 10`")
 
 
-# ---------- Oddiy foydalanuvchilar uchun limit so'rash (ixtiyoriy) ----------
-@dp.message(Command("requestlimit"))
-async def request_limit(message: Message):
-    await message.answer(
-        f"Admin ({ADMIN_CONTACT}) ga yozing va limit so'rang.\n"
-        f"Misol: 'Limit bersangiz, user_id: {message.from_user.id}'"
-    )
-
-
-# Qolgan kodlar (oldingi versiyadan)
+# ==================== ASOSIY OQIM ====================
 @dp.message(Flow.waiting_text, F.text)
 async def receive_text(message: Message, state: FSMContext):
     await state.update_data(source_text=message.text)
@@ -161,7 +151,7 @@ async def choose_language(callback: CallbackQuery, state: FSMContext):
     lang = callback.data.split("_")[1]
     await state.update_data(language=lang)
     await callback.message.edit_text("📑 Nechta slayd kerak?")
-    await callback.message.answer("Slayd sonini tanlang:", reply_markup=kb_slide_count())
+    await callback.message.answer("Tanlang:", reply_markup=kb_slide_count())
     await state.set_state(Flow.waiting_slide_count)
     await callback.answer()
 
@@ -182,7 +172,7 @@ async def choose_style(callback: CallbackQuery, state: FSMContext):
     await state.update_data(style=style)
     await callback.message.edit_text("📝 Qo'shimcha izoh bormi?")
     await callback.message.answer(
-        "Izoh yozing yoki pastdagi tugmani bosing:",
+        "Yozing yoki tugmani bosing:",
         reply_markup=kb_notes(),
     )
     await state.set_state(Flow.waiting_notes)
@@ -200,14 +190,18 @@ async def skip_notes(callback: CallbackQuery, state: FSMContext):
 @dp.message(Flow.waiting_notes, F.text)
 async def receive_notes(message: Message, state: FSMContext):
     await state.update_data(extra_notes=message.text)
-    status = await message.answer("⏳ Tayyorlanmoqda...")
+    status = await message.answer("⏳ Tayyorlanmoqda, kuting...")
     await generate_and_send(message.from_user.id, status, state)
 
 
 async def generate_and_send(user_id: int, status_message: Message, state: FSMContext):
     db.ensure_user(user_id)
+
     if not db.can_generate(user_id):
-        await status_message.answer(f"🚫 Limitingiz tugadi.\nAdmin: {ADMIN_CONTACT}")
+        await status_message.answer(
+            "🚫 Bugungi bepul limitingiz tugadi.\n"
+            f"Limit oshirish uchun admin bilan bog‘laning: {ADMIN_CONTACT}"
+        )
         await state.clear()
         return
 
@@ -229,9 +223,13 @@ async def generate_and_send(user_id: int, status_message: Message, state: FSMCon
         await bot.send_document(
             chat_id=user_id,
             document=FSInputFile(output_path, filename="taqdimot.pptx"),
-            caption=f"✅ Tayyor!\nDizayn: {style.capitalize()}",
+            caption=f"✅ Taqdimot tayyor!\nDizayn: {style.capitalize()}",
         )
         db.increment_usage(user_id)
+
+        remaining = db.remaining_today(user_id)
+        if remaining > 0:
+            await bot.send_message(user_id, f"📌 Bugun yana {remaining} ta taqdimot yasashingiz mumkin.")
     except Exception as e:
         logger.exception("Xatolik")
         await bot.send_message(user_id, "❌ Xatolik yuz berdi. Qayta urinib ko‘ring.")
@@ -256,5 +254,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
     
