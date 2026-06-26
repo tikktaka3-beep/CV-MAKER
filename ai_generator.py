@@ -1,7 +1,5 @@
 """
-ai_generator.py
-Google Gemini API orqali foydalanuvchi matni asosida slaydlar tarkibini (JSON) generatsiya qiladi.
-Yangi ko'p theme (dizayn) qo'llab-quvvatlanadi.
+ai_generator.py — Mukammal AI prompt bilan
 """
 
 import os
@@ -12,19 +10,14 @@ from google.genai import types
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# Bepul tarifda ishlaydigan tezkor model
 MODEL = "gemini-2.5-flash"
 
-LANGUAGE_NAMES = {
-    "uz": "o'zbek",
-    "ru": "rus",
-    "en": "ingliz",
-}
+LANGUAGE_NAMES = {"uz": "o'zbek", "ru": "rus", "en": "ingliz"}
 
 STYLE_DESCRIPTIONS = {
-    "rasmiy": "rasmiy va professional uslubda, ishbilarmonlik tiliga mos",
-    "quvnoq": "quvnoq, jonli va qiziqarli uslubda, o'quvchini qiziqtiradigan ohangda",
-    "simple": "juda sodda va tushunarli tilda, ortiqcha murakkab so'z va atamalarsiz",
+    "rasmiy": "rasmiy va professional uslubda",
+    "quvnoq": "quvnoq, jonli va qiziqarli uslubda",
+    "simple": "juda sodda va tushunarli tilda",
 }
 
 THEME_DESCRIPTIONS = {
@@ -43,37 +36,32 @@ THEME_DESCRIPTIONS = {
 }
 
 
-def generate_slides_content(text: str, language: str, slide_count: int,
-                             style: str, extra_notes: str = "") -> dict:
-    """
-    Qaytaradi: {"slides": [{"title": str, "subtitle": str, "bullets": [str, ...]}, ...]}
-    Birinchi element - muqova slayd, oxirgisi - yopilish slaydi.
-    """
+def generate_slides_content(text: str, language: str, slide_count: int, style: str, extra_notes: str = "") -> dict:
     lang_name = LANGUAGE_NAMES.get(language, "o'zbek")
     style_desc = STYLE_DESCRIPTIONS.get(style, STYLE_DESCRIPTIONS["rasmiy"])
     theme_desc = THEME_DESCRIPTIONS.get(style, THEME_DESCRIPTIONS["rasmiy"])
 
-    system_prompt = f"""Sen professional taqdimot (prezentatsiya) tarkibini tuzuvchi yordamchisan.
+    system_prompt = f"""Sen yuqori darajadagi professional prezentatsiya dizayneri va kontent muallifisan.
 
-Foydalanuvchi bergan matn/mavzu asosida ANIQ {slide_count} ta slayddan iborat taqdimot tarkibini tuz.
+Foydalanuvchi matni asosida aniq {slide_count} ta slayddan iborat mukammal taqdimot yarating.
 
-Qoidalar:
-- Taqdimot tili: {lang_name} tili. Barcha matn (sarlavha, subtitle, bullet'lar) {lang_name} tilida yozilishi shart.
+QAT'IY QOIDALAR:
+- Til: {lang_name} tili. Barcha matnlar toza {lang_name} tilida bo'lsin.
 - Matn uslubi: {style_desc}.
-- Visual theme: {theme_desc}. Kontentni shu mavzuga mos ravishda jonlantiring (masalan, matematik mavzuda formulalar, astronomikda kosmos haqida, sportda harakat va motivatsiya elementlari).
-- Birinchi slayd - muqova (cover) slayd: faqat qisqa va ta'sirli sarlavha (title) va kichik subtitle bo'lsin, "bullets" bo'sh array [] bo'lsin.
-- Oxirgi slayd - yopilish/xulosa slaydi: qisqa rahmat yoki xulosa sarlavhasi va subtitle, "bullets" bo'sh array [] bo'lsin.
-- Orada qolgan slaydlar - mazmunli slaydlar: har birida qisqa sarlavha va 3-5 ta QISQA bullet point (har biri 1 qisqa gap, 12-15 so'zdan oshmasin).
-- Umumiy slayd soni aniq {slide_count} ta bo'lishi kerak (muqova va yopilish ham shu songa kiradi).
-- Takrorlanishlardan saqlan, har slayd alohida fikr bersin.
+- Visual Theme: {theme_desc}. Kontentni shu mavzuga to'liq moslashtiring (masalan: matematikada formulalar, astronomiyada kosmos tasvirlari, sportda dinamika va g'alaba ruhini qo'shing).
+- Birinchi slayd: Kuchli muqova (title + subtitle).
+- Oxirgi slayd: Yopilish / Rahmat / Savollar slaydi.
+- O'rtadagi slaydlar: Har birida 3-5 ta qisqa, ta'sirli bullet (har biri 10-15 so'zdan oshmasin).
+- Har bir slayd alohida, mantiqiy ketma-ketlikda bo'lsin.
+- Takrorlanish bo'lmasin.
 
-Javobni faqat quyidagi JSON sxemasiga mos holda qaytar:
+Javobni faqat quyidagi JSON formatida qaytar:
 {{"slides": [{{"title": "...", "subtitle": "...", "bullets": ["...", "..."]}}, ...]}}
 """
 
-    user_content = f"Mavzu/matn:\n{text}"
+    user_content = f"Mavzu:\n{text}"
     if extra_notes:
-        user_content += f"\n\nQo'shimcha izoh/talab:\n{extra_notes}"
+        user_content += f"\n\nQo'shimcha talablar:\n{extra_notes}"
 
     response = client.models.generate_content(
         model=MODEL,
@@ -81,25 +69,20 @@ Javobni faqat quyidagi JSON sxemasiga mos holda qaytar:
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             response_mime_type="application/json",
-            temperature=0.7,
+            temperature=0.75,
+            top_p=0.85,
         ),
     )
 
-    try:
-        data = json.loads(response.text)
-    except json.JSONDecodeError:
-        raise ValueError("AI javobi JSON formatida emas")
+    data = json.loads(response.text)
 
-    if "slides" not in data or not isinstance(data["slides"], list) or not data["slides"]:
-        raise ValueError("AI javobida slaydlar topilmadi")
+    if "slides" not in data or len(data["slides"]) < 2:
+        raise ValueError("AI javobi noto'g'ri")
 
-    # Slayd sonini tekshirish
-    if len(data["slides"]) != slide_count:
-        # Agar kerakli son bo'lmasa, qisqartiramiz yoki to'ldiramiz (oddiy yechim)
-        data["slides"] = data["slides"][:slide_count]
-        while len(data["slides"]) < slide_count:
-            data["slides"].append({"title": "Xulosa", "subtitle": "", "bullets": []})
+    # Slayd sonini to'g'rilash
+    data["slides"] = data["slides"][:slide_count]
+    while len(data["slides"]) < slide_count:
+        data["slides"].append({"title": "Xulosa", "subtitle": "Rahmat!", "bullets": []})
 
     return data
-                                 
                                  
