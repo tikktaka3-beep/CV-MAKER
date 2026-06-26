@@ -1,5 +1,5 @@
 """
-ai_generator.py — Groq (tez va kuchli)
+ai_generator.py — Groq (tuzatilgan, mustahkam versiya)
 """
 
 import os
@@ -9,7 +9,7 @@ from groq import Groq
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 client = Groq(api_key=GROQ_API_KEY)
 
-MODEL = "llama-3.3-70b-versatile"   # yoki "mixtral-8x7b-32768", "gemma2-9b-it"
+MODEL = "llama-3.3-70b-versatile"  # yoki "mixtral-8x7b-32768"
 
 LANGUAGE_NAMES = {
     "uz": "o'zbek",
@@ -19,17 +19,23 @@ LANGUAGE_NAMES = {
 
 STYLE_DESCRIPTIONS = {
     "rasmiy": "rasmiy va professional uslubda",
-    "quvnoq": "quvnoq, jonli va qiziqarli uslubda",
-    "simple": "juda sodda va tushunarli tilda",
+    "quvnoq": "quvnoq va jonli uslubda",
+    "simple": "oddiy va tushunarli tilda",
 }
 
 THEME_DESCRIPTIONS = {
-    "rasmiy": "rasmiy va professional", "zamonaviy": "zamonaviy va minimalistik",
-    "rangbarang": "rang-barang va quvnoq", "och": "engil va ochiq ranglarda",
-    "toq": "chuqur va to'q ranglarda", "qadimiy": "qadimiy va klassik",
-    "adabiy": "adabiy va ilhomlantiruvchi", "matematik": "ilmiy va aniq",
-    "kimyoviy": "kimyoviy uslubda", "fizik": "fizika ruhida",
-    "astronomik": "kosmos va yulduzlar mavzusida", "sport": "dinamik va motivatsion"
+    "rasmiy": "rasmiy va professional", 
+    "zamonaviy": "zamonaviy va minimalistik",
+    "rangbarang": "rang-barang va quvnoq", 
+    "och": "engil va ochiq ranglarda",
+    "toq": "chuqur va to'q ranglarda", 
+    "qadimiy": "qadimiy va klassik",
+    "adabiy": "adabiy va ilhomlantiruvchi", 
+    "matematik": "ilmiy va aniq",
+    "kimyoviy": "kimyoviy uslubda", 
+    "fizik": "fizika ruhida",
+    "astronomik": "kosmos va yulduzlar mavzusida", 
+    "sport": "dinamik va motivatsion"
 }
 
 
@@ -38,40 +44,67 @@ def generate_slides_content(text: str, language: str, slide_count: int, style: s
     style_desc = STYLE_DESCRIPTIONS.get(style, STYLE_DESCRIPTIONS["rasmiy"])
     theme_desc = THEME_DESCRIPTIONS.get(style, THEME_DESCRIPTIONS["rasmiy"])
 
-    system_prompt = f"""Sen professional prezentatsiya yaratuvchisan.
-Foydalanuvchi matni asosida aniq {slide_count} ta slayddan iborat mukammal taqdimot yarating.
+    system_prompt = f"""Sen professional prezentatsiya yaratuvchisan. 
+Foydalanuvchi bergan mavzu asosida aniq {slide_count} ta slayddan iborat taqdimot tayyorla.
 
-Qoidalar:
-- Til: {lang_name}
+QAT'IY TALABLAR:
+- Barcha matn {lang_name} tilida bo'lsin.
 - Uslub: {style_desc}
-- Theme: {theme_desc} — kontentni shunga moslashtir
-- 1-slayd: Muqova
-- Oxirgi slayd: Xulosa / Rahmat
-- O'rtadagilar: 3-5 ta qisqa bullet
-- Javob faqat JSON bo'lsin."""
+- Dizayn mavzusi: {theme_desc}
+- 1-slayd: Muqova (title + subtitle, bullets: [])
+- Oxirgi slayd: Xulosa yoki rahmat (bullets: [])
+- O'rtadagi slaydlar: Har birida 3-5 ta qisqa bullet
+- Javobni faqat toza JSON formatida qaytar. Boshqa hech narsa yozma.
 
-    user_prompt = f"Mavzu: {text}\nQo'shimcha: {extra_notes}" if extra_notes else f"Mavzu: {text}"
+JSON sxemasi:
+{{
+  "slides": [
+    {{"title": "Sarlavha", "subtitle": "Qo'shimcha matn", "bullets": ["bullet 1", "bullet 2"]}},
+    ...
+  ]
+}}"""
 
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        temperature=0.7,
-        max_tokens=4000,
-        response_format={"type": "json_object"}
-    )
+    user_prompt = f"Mavzu: {text}"
+    if extra_notes:
+        user_prompt += f"\n\nQo'shimcha talab: {extra_notes}"
 
-    data = json.loads(response.choices[0].message.content)
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7,
+            max_tokens=4000,
+            response_format={"type": "json_object"}
+        )
 
-    if "slides" not in data:
-        raise ValueError("AI javobi noto'g'ri")
+        content = response.choices[0].message.content.strip()
+        data = json.loads(content)
 
-    # Slayd sonini to'g'rilash
-    data["slides"] = data["slides"][:slide_count]
-    while len(data["slides"]) < slide_count:
-        data["slides"].append({"title": "Xulosa", "subtitle": "Rahmat!", "bullets": []})
+        if "slides" not in data or not isinstance(data["slides"], list):
+            raise ValueError("JSON da 'slides' topilmadi")
 
-    return data
+        # Slayd sonini to'g'rilash
+        slides = data["slides"][:slide_count]
+        while len(slides) < slide_count:
+            slides.append({
+                "title": "Xulosa",
+                "subtitle": "Rahmat! Savollaringiz bo'lsa so'rang.",
+                "bullets": []
+            })
+        
+        return {"slides": slides}
+
+    except Exception as e:
+        print("Groq xatosi:", str(e))
+        # Fallback oddiy struktura
+        return {
+            "slides": [
+                {"title": "Muqova", "subtitle": text[:100], "bullets": []},
+                {"title": "Asosiy ma'lumot", "subtitle": "", "bullets": ["Ma'lumot yetarli emas"]},
+                {"title": "Xulosa", "subtitle": "Rahmat!", "bullets": []}
+            ][:slide_count]
+        }
                                  
