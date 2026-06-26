@@ -66,8 +66,13 @@ Javobni faqat quyidagi JSON sxemasiga mos holda qaytar:
             system_instruction=system_prompt,
             response_mime_type="application/json",
             temperature=0.7,
+            max_output_tokens=4096,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
     )
+
+    if not response.text:
+        raise ValueError("AI hech qanday javob qaytarmadi (bo'sh javob)")
 
     data = json.loads(response.text)
 
@@ -75,3 +80,4 @@ Javobni faqat quyidagi JSON sxemasiga mos holda qaytar:
         raise ValueError("AI javobida slaydlar topilmadi")
 
     return data
+                                 
